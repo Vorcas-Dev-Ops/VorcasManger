@@ -34,24 +34,22 @@ router.post('/request', async (req, res) => {
         if (roleName === 'TEAM_LEAD') initialStatus = 'PENDING_HR';
         else if (roleName === 'HR') initialStatus = 'PENDING_ADMIN';
 
-        if (leave_type !== 'Sick Leave') {
-            const maxDays = leave_type === 'Annual Leave' ? 18 : (leave_type === 'Casual Leave' ? 2 : 0);
-            if (maxDays > 0) {
-                const year = new Date(start_date).getFullYear();
-                const usedResult = await pool.query(
-                    `SELECT SUM(end_date - start_date + 1) as used_days 
-                     FROM leave_requests 
-                     WHERE employee_id = $1 AND leave_type = $2 AND status != 'REJECTED' 
-                     AND EXTRACT(YEAR FROM start_date) = $3`,
-                    [employee_id, leave_type, year]
-                );
-                
-                const usedDays = parseInt(usedResult.rows[0].used_days) || 0;
-                const requestedDays = Math.ceil((new Date(end_date) - new Date(start_date)) / (1000 * 60 * 60 * 24)) + 1;
-                
-                if (usedDays + requestedDays > maxDays) {
-                    return res.status(400).json({ error: 'Insufficient leave balance' });
-                }
+        const maxDays = leave_type === 'Annual Leave' ? 18 : (leave_type === 'Sick Leave' ? 5 : (leave_type === 'Casual Leave' ? 2 : 0));
+        if (maxDays > 0) {
+            const year = new Date(start_date).getFullYear();
+            const usedResult = await pool.query(
+                `SELECT SUM(end_date - start_date + 1) as used_days 
+                 FROM leave_requests 
+                 WHERE employee_id = $1 AND leave_type = $2 AND status != 'REJECTED' 
+                 AND EXTRACT(YEAR FROM start_date) = $3`,
+                [employee_id, leave_type, year]
+            );
+            
+            const usedDays = parseInt(usedResult.rows[0].used_days) || 0;
+            const requestedDays = Math.ceil((new Date(end_date) - new Date(start_date)) / (1000 * 60 * 60 * 24)) + 1;
+            
+            if (usedDays + requestedDays > maxDays) {
+                return res.status(400).json({ error: 'Insufficient leave balance' });
             }
         }
 
