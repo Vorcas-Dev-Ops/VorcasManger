@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model roles {
+  id              Int         @id @default(autoincrement())
+  role_name       String      @unique @db.VarChar(50)
+  hierarchy_level Int
+  created_at      DateTime?   @default(now()) @db.Timestamp(6)
+  employees       employees[]
+  users           users[]
+}
+
+model users {
+  id                   Int             @id @default(autoincrement())
+  email                String          @unique @db.VarChar(100)
+  password_hash        String
+  role_id              Int?
+  is_active            Boolean?        @default(true)
+  created_at           DateTime?       @default(now()) @db.Timestamp(6)
+  updated_at           DateTime?       @default(now()) @db.Timestamp(6)
+  must_change_password Boolean         @default(true)
+  fcm_token            String?
+  password_changed_at  DateTime?       @db.Timestamptz(6)
+  employee             employees?
+  notifications        notifications[]
+  role                 roles?          @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model departments {
+  id              Int         @id @default(autoincrement())
+  department_name String      @db.VarChar(100)
+  created_at      DateTime?   @default(now()) @db.Timestamp(6)
+  description     String?
+  employees       employees[]
+  tasks           tasks[]
+}
+
+model employees {
+  id                      Int                @id @default(autoincrement())
+  user_id                 Int?               @unique
+  employee_id             String             @unique @db.VarChar(50)
+  first_name              String             @db.VarChar(100)
+  last_name               String             @db.VarChar(100)
+  phone                   String?            @db.VarChar(20)
+  department_id           Int?
+  role_id                 Int?
+  supervisor_id           Int?
+  hire_date               DateTime           @db.Date
+  status                  String?            @default("ACTIVE") @db.VarChar(20)
+  created_at              DateTime?          @default(now()) @db.Timestamp(6)
+  updated_at              DateTime?          @default(now()) @db.Timestamp(6)
+  profile_picture_url     String?
+  attendance              attendance[]
+  company_events          company_events[]
+  department              departments?       @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  supervisor              employees?         @relation("EmployeeToSupervisor", fields: [supervisor_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "employees_manager_id_fkey")
+  subordinates            employees[]        @relation("EmployeeToSupervisor")
+  role                    roles?             @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user                    users?             @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  leave_requests_approved leave_requests[]   @relation("ApprovedByToLeaveRequest")
+  leave_requests          leave_requests[]   @relation("EmployeeToLeaveRequest")
+  task_assignments        task_assignments[]
+  tasks_assigned_by       tasks[]            @relation("AssignedByToTask")
+  tasks_assigned_to       tasks[]            @relation("AssignedToToTask")
+
+  @@index([supervisor_id], map: "idx_employee_supervisor")
+}
+
+model attendance {
+  id                    Int                 @id @default(autoincrement())
+  employee_id           Int?
+  check_in_time         DateTime?           @db.Timestamp(6)
+  check_out_time        DateTime?           @db.Timestamp(6)
+  location_lat          Decimal?            @db.Decimal(10, 8)
+  location_long         Decimal?            @db.Decimal(11, 8)
+  attendance_date       DateTime?           @default(dbgenerated("CURRENT_DATE")) @db.Date
+  work_hours            Decimal?            @db.Decimal(4, 2)
+  created_at            DateTime?           @default(now()) @db.Timestamp(6)
+  is_late               Boolean?            @default(false)
+  is_early_checkout     Boolean?            @default(false)
+  early_checkout_reason String?
+  employee              employees?          @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  attendance_breaks     attendance_breaks[]
+
+  @@index([attendance_date], map: "idx_attendance_date")
+}
+
+model attendance_breaks {
+  id            Int         @id @default(autoincrement())
+  attendance_id Int?
+  break_start   DateTime?   @default(now()) @db.Timestamp(6)
+  break_end     DateTime?   @db.Timestamp(6)
+  created_at    DateTime?   @default(now()) @db.Timestamp(6)
+  attendance    attendance? @relation(fields: [attendance_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model leave_requests {
+  id          Int        @id @default(autoincrement())
+  employee_id Int?
+  leave_type  String     @db.VarChar(50)
+  start_date  DateTime   @db.Date
+  end_date    DateTime   @db.Date
+  reason      String?
+  status      String?    @default("PENDING") @db.VarChar(20)
+  approved_by Int?
+  created_at  DateTime?  @default(now()) @db.Timestamp(6)
+  approver    employees? @relation("ApprovedByToLeaveRequest", fields: [approved_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employee    employees? @relation("EmployeeToLeaveRequest", fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([status], map: "idx_leave_status")
+}
+
+model tasks {
+  id               Int                @id @default(autoincrement())
+  title            String             @db.VarChar(200)
+  description      String?
+  assigned_by      Int?
+  assigned_to      Int?
+  priority         String?            @default("MEDIUM") @db.VarChar(20)
+  status           String?            @default("PENDING") @db.VarChar(20)
+  deadline         DateTime?          @db.Timestamp(6)
+  created_at       DateTime?          @default(now()) @db.Timestamp(6)
+  updated_at       DateTime?          @default(now()) @db.Timestamp(6)
+  department_id    Int?
+  task_type        String?            @default("TASK") @db.VarChar(20)
+  start_time       DateTime?          @db.Time(6)
+  meeting_link     String?
+  github_url       String?
+  task_assignments task_assignments[]
+  assigner         employees?         @relation("AssignedByToTask", fields: [assigned_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignee         employees?         @relation("AssignedToToTask", fields: [assigned_to], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  departments      departments?       @relation(fields: [department_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([assigned_to], map: "idx_tasks_assigned_to")
+}
+
+model notifications {
+  id         Int       @id @default(autoincrement())
+  user_id    Int?
+  title      String    @db.VarChar(255)
+  body       String
+  type       String?   @db.VarChar(50)
+  is_read    Boolean?  @default(false)
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  user       users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model company_events {
+  id          Int        @id @default(autoincrement())
+  title       String     @db.VarChar(255)
+  description String?
+  event_date  DateTime   @db.Date
+  event_type  String     @db.VarChar(50)
+  created_by  Int?
+  created_at  DateTime?  @default(now()) @db.Timestamp(6)
+  employees   employees? @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model task_assignments {
+  id          Int        @id @default(autoincrement())
+  task_id     Int?
+  employee_id Int?
+  employees   employees? @relation(fields: [employee_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tasks       tasks?     @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([task_id, employee_id])
+}
